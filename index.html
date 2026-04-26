@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+<meta name="theme-color" content="#7c2d12" />
+<title>神社方角ガイド</title>
+<link href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+P+One&family=Noto+Serif+JP:wght@900&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box}html,body{margin:0;padding:0;height:100%;overflow:hidden}
+body{font-family:"Noto Serif JP",serif;color:#fef3c7;background:radial-gradient(800px 500px at 50% 30%,#7c2d12,#1a0500);touch-action:manipulation;user-select:none;-webkit-tap-highlight-color:transparent}
+#app{display:flex;flex-direction:column;height:100dvh;padding:14px;gap:10px;max-width:480px;margin:0 auto;align-items:center}
+.title{font-family:"Mochiy Pop P One",sans-serif;font-size:24px;color:#fbbf24;-webkit-text-stroke:3px #000;paint-order:stroke fill;text-shadow:3px 3px 0 #7c2d12;margin:6px 0}
+select{background:rgba(0,0,0,.4);color:#fef3c7;border:2px solid #fbbf24;border-radius:8px;padding:8px 14px;font-size:14px;font-family:inherit;width:100%;max-width:300px}
+.compass{position:relative;width:280px;height:280px}
+.dial{position:absolute;inset:0;background:radial-gradient(circle,rgba(0,0,0,.6),rgba(0,0,0,.3));border:6px solid #fbbf24;border-radius:50%;box-shadow:0 0 30px rgba(251,191,36,.4)}
+.dial::before{content:'';position:absolute;inset:20px;border:1px dashed rgba(251,191,36,.4);border-radius:50%}
+.dir{position:absolute;font-family:"Noto Serif JP",serif;font-weight:900;font-size:18px;color:#fbbf24}
+.dir.n{top:8px;left:50%;transform:translateX(-50%)}
+.dir.s{bottom:8px;left:50%;transform:translateX(-50%)}
+.dir.e{right:10px;top:50%;transform:translateY(-50%)}
+.dir.w{left:10px;top:50%;transform:translateY(-50%)}
+.arrow{position:absolute;left:50%;top:50%;width:8px;height:130px;transform-origin:bottom center;transform:translate(-50%,-100%) rotate(0deg);transition:transform .25s ease-out}
+.arrow::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,#ef4444 0%,#ef4444 50%,#fbbf24 50%,#fbbf24 100%);border-radius:4px;clip-path:polygon(0 0,100% 0,50% 100%,50% 100%)}
+.arrow .head{position:absolute;left:50%;top:0;width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-bottom:30px solid #ef4444;transform:translate(-50%,-100%);filter:drop-shadow(0 0 6px rgba(239,68,68,.6))}
+.center-dot{position:absolute;left:50%;top:50%;width:20px;height:20px;background:#fbbf24;border:3px solid #000;border-radius:50%;transform:translate(-50%,-50%)}
+.info{background:rgba(0,0,0,.4);border:2px dashed #fbbf24;border-radius:10px;padding:10px 14px;font-size:13px;line-height:1.6;text-align:center}
+.info b{color:#fbbf24;font-size:18px;display:block;margin-bottom:4px}
+.actions{display:flex;gap:8px}
+.actions button{background:#fbbf24;color:#000;border:3px solid #000;padding:10px 18px;font-family:"Mochiy Pop P One",sans-serif;font-size:13px;border-radius:999px;cursor:pointer;box-shadow:3px 3px 0 #000}
+.note{font-size:9px;text-align:center;opacity:.7;line-height:1.5}
+.err{padding:10px;background:rgba(255,0,0,.3);border:2px solid #f55;border-radius:10px;font-size:12px;display:none}
+.err.show{display:block}
+</style>
+</head>
+<body>
+<div id="app">
+<h1 class="title">神社方角ガイド ⛩</h1>
+<select id="sel"></select>
+<div class="compass">
+  <div class="dial"></div>
+  <div class="dir n">北</div>
+  <div class="dir s">南</div>
+  <div class="dir e">東</div>
+  <div class="dir w">西</div>
+  <div class="arrow" id="arrow"><div class="head"></div></div>
+  <div class="center-dot"></div>
+</div>
+<div class="info">
+  <b id="name">—</b>
+  距離: <span id="dist">—</span> / 方角: <span id="bearing">—</span>°
+</div>
+<div class="actions">
+  <button id="btn-perm">📍 許可</button>
+</div>
+<div class="note">スマホを持って回転 → 矢印が神社方向を指す<br/>※ 屋外で正確 / iOSはモーション許可必要</div>
+<div class="err" id="err"></div>
+</div>
+<script>
+(()=>{
+'use strict';
+const $=(id)=>document.getElementById(id);
+const SHRINES=[
+{n:'伊勢神宮',lat:34.4548,lon:136.7253},
+{n:'出雲大社',lat:35.4023,lon:132.6856},
+{n:'明治神宮',lat:35.6764,lon:139.6993},
+{n:'伏見稲荷大社',lat:34.9671,lon:135.7727},
+{n:'熊野本宮大社',lat:33.8395,lon:135.7724},
+{n:'厳島神社',lat:34.2960,lon:132.3197},
+{n:'住吉大社',lat:34.6125,lon:135.4929},
+{n:'鶴岡八幡宮',lat:35.3252,lon:139.5560},
+{n:'八坂神社',lat:35.0036,lon:135.7785},
+{n:'太宰府天満宮',lat:33.5316,lon:130.5350},
+{n:'白川郷大野神社',lat:36.2588,lon:136.9085},
+{n:'金刀比羅宮',lat:34.1857,lon:133.8104},
+{n:'氷川神社',lat:35.9165,lon:139.6298},
+{n:'熱田神宮',lat:35.1276,lon:136.9085},
+{n:'日光東照宮',lat:36.7580,lon:139.5985}
+];
+const sel=$('sel');
+SHRINES.forEach((s,i)=>{const o=document.createElement('option');o.value=i;o.textContent='⛩ '+s.n;sel.appendChild(o)});
+let myLat=null,myLon=null,heading=0;
+function bearing(lat1,lon1,lat2,lon2){
+  const toR=d=>d*Math.PI/180,toD=r=>r*180/Math.PI;
+  const dLon=toR(lon2-lon1);
+  const y=Math.sin(dLon)*Math.cos(toR(lat2));
+  const x=Math.cos(toR(lat1))*Math.sin(toR(lat2))-Math.sin(toR(lat1))*Math.cos(toR(lat2))*Math.cos(dLon);
+  return (toD(Math.atan2(y,x))+360)%360;
+}
+function distKm(lat1,lon1,lat2,lon2){
+  const R=6371,toR=d=>d*Math.PI/180;
+  const dLat=toR(lat2-lat1),dLon=toR(lon2-lon1);
+  const a=Math.sin(dLat/2)**2+Math.cos(toR(lat1))*Math.cos(toR(lat2))*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function update(){
+  if(myLat==null){return}
+  const s=SHRINES[parseInt(sel.value)];
+  const b=bearing(myLat,myLon,s.lat,s.lon);
+  const d=distKm(myLat,myLon,s.lat,s.lon);
+  $('name').textContent='⛩ '+s.n;
+  $('dist').textContent=d.toFixed(1)+'km';
+  $('bearing').textContent=Math.round(b);
+  // arrow rotates: bearing - heading
+  const angle=b-heading;
+  $('arrow').style.transform=`translate(-50%,-100%) rotate(${angle}deg)`;
+}
+async function requestPerm(){
+  $('err').classList.remove('show');
+  // Geolocation
+  if(!navigator.geolocation){$('err').textContent='位置情報非対応';$('err').classList.add('show');return}
+  navigator.geolocation.getCurrentPosition(pos=>{
+    myLat=pos.coords.latitude;myLon=pos.coords.longitude;
+    update();
+    navigator.geolocation.watchPosition(pos=>{myLat=pos.coords.latitude;myLon=pos.coords.longitude;update()},null,{enableHighAccuracy:true});
+  },e=>{$('err').textContent='位置取得失敗: '+e.message;$('err').classList.add('show')},{enableHighAccuracy:true});
+  // DeviceOrientation (iOS requires permission)
+  if(typeof DeviceOrientationEvent!=='undefined' && typeof DeviceOrientationEvent.requestPermission==='function'){
+    try{const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted'){$('err').textContent='方位センサー許可が必要';$('err').classList.add('show')}}catch(_){}
+  }
+  window.addEventListener('deviceorientationabsolute',onOrient,true);
+  window.addEventListener('deviceorientation',onOrient,true);
+}
+function onOrient(e){
+  let h=null;
+  if(e.webkitCompassHeading!=null)h=e.webkitCompassHeading;
+  else if(e.absolute && e.alpha!=null)h=360-e.alpha;
+  else if(e.alpha!=null)h=360-e.alpha;
+  if(h!=null){heading=h;update()}
+}
+sel.addEventListener('change',update);
+$('btn-perm').addEventListener('click',requestPerm);
+})();
+</script>
+</body>
+</html>
